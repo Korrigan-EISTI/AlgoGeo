@@ -90,7 +90,9 @@ class mat4:
                     self.calculateComposante(3, 0, mat), self.calculateComposante(3, 1, mat), self.calculateComposante(3, 2, mat), self.calculateComposante(3, 3, mat))
     
     def calculateVectorComposante(self, i, vec):
-        return (self.mat[i][0] * vec.x) + (self.mat[i][1] * vec.y) + (self.mat[i][2] * vec.z) + (self.mat[i][3] * 1)
+        if (isinstance(vec, vec3)):
+            vec = vec.hom()
+        return (self.mat[i][0] * vec.x) + (self.mat[i][1] * vec.y) + (self.mat[i][2] * vec.z) + (self.mat[i][3] * vec.w)
         
     def vectorMultiplication(self, vec):
         return vec4(self.calculateVectorComposante(0, vec), self.calculateVectorComposante(1, vec), self.calculateVectorComposante(2, vec), self.calculateVectorComposante(3, vec))

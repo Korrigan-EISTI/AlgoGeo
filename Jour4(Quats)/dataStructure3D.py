@@ -1,6 +1,4 @@
 import math
-import pygame
-import sys
 
 class vec3:
     def __init__(self, x, y, z):
@@ -43,6 +41,7 @@ class vec3:
     def hom(self):
         return vec4(self.x, self.y, self.z, 1)
 
+
 class vec4(vec3):
     def __init__(self, x, y, z, w):
         super().__init__(x, y, z)
@@ -53,6 +52,7 @@ class vec4(vec3):
     
     def show(self):
         print(f'({self.x}, {self.y}, {self.z}, {self.w})')
+
 
 class mat4:
     def __init__(self, 
@@ -69,6 +69,18 @@ class mat4:
         print("Matrice:")
         for row in self.mat:
             print(row)
+    
+    def toString(self):
+        tab = []
+        s = ''
+        for row in self.mat:
+            s+='|'
+            for col in row:
+                s+= ' ' + str(col)
+            s+=' |'
+            tab.append(s)
+            s = ''
+        return tab
     
     def scalarMultiplication(self, k):
         return mat4(self.mat[0][0] * k, self.mat[0][1] * k, self.mat[0][2] * k, self.mat[0][3] * k,
@@ -90,22 +102,21 @@ class mat4:
                     self.calculateComposante(3, 0, mat), self.calculateComposante(3, 1, mat), self.calculateComposante(3, 2, mat), self.calculateComposante(3, 3, mat))
     
     def calculateVectorComposante(self, i, vec):
-        return (self.mat[i][0] * vec.x) + (self.mat[i][1] * vec.y) + (self.mat[i][2] * vec.z) + (self.mat[i][3] * 1)
+        if (isinstance(vec, vec3)):
+            vec = vec.hom()
+        return (self.mat[i][0] * vec.x) + (self.mat[i][1] * vec.y) + (self.mat[i][2] * vec.z) + (self.mat[i][3] * vec.w)
         
     def vectorMultiplication(self, vec):
         return vec4(self.calculateVectorComposante(0, vec), self.calculateVectorComposante(1, vec), self.calculateVectorComposante(2, vec), self.calculateVectorComposante(3, vec))
 
-    # Fonction pour calculer le déterminant d'une matrice 2x2
     def determinant2x2(self, a, b, c, d):
         return a * d - b * c
 
-    # Fonction pour calculer le déterminant d'une matrice 3x3
     def determinant3x3(self, mat3):
         return (mat3[0][0] * self.determinant2x2(mat3[1][1], mat3[1][2], mat3[2][1], mat3[2][2])
                - mat3[0][1] * self.determinant2x2(mat3[1][0], mat3[1][2], mat3[2][0], mat3[2][2])
                + mat3[0][2] * self.determinant2x2(mat3[1][0], mat3[1][1], mat3[2][0], mat3[2][1]))
 
-    # Fonction pour extraire une matrice 3x3 en retirant la ligne i et la colonne j
     def submatrix3x3(self, i, j):
         mat3 = []
         for row in range(4):
@@ -119,19 +130,14 @@ class mat4:
             mat3.append(row_data)
         return mat3
 
-    # Fonction pour calculer le déterminant de la matrice 4x4
     def determinant(self):
         det = 0
         for col in range(4):
-            # Extraction de la sous-matrice 3x3
             submat = self.submatrix3x3(0, col)
-            # Calcul du cofacteur
             cofactor = ((-1) ** col) * self.mat[0][col] * self.determinant3x3(submat)
-            # Ajout au déterminant
             det += cofactor
         return det
 
-    # Calcul de la matrice inverse
     def inverse(self):
         det = self.determinant()
         if det == 0:
@@ -163,7 +169,43 @@ class mat4:
                     new_m20, new_m21, new_m22, new_m23,
                     new_m30, new_m31, new_m32, new_m33).scalarMultiplication(1 / det)
 
-import math
+class Quaternion:
+    def __init__(self, x, y, z, w):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.w = w
+
+    def __add__(self, other):
+        return Quaternion(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w)
+    
+    def __mul__(self, other):
+        w = self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z
+        x = self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y
+        y = self.w * other.y - self.x * other.z + self.y * other.w + self.z * other.x
+        z = self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w
+        return Quaternion(w, x, y, z)
+
+    def conjugate(self):
+        return Quaternion(self.w, -self.x, -self.y, -self.z)
+
+    def norm(self):
+        return math.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
+
+    def normalize(self):
+        norm = self.norm()
+        if norm == 0:
+            return Quaternion(1, 0, 0, 0)  # Avoid division by zero, return identity quaternion
+        return self / norm
+
+    def inverse(self):
+        return self.conjugate() / (self.norm() ** 2)
+
+    def rotate_vector(self, v):
+        q_v = Quaternion(0, v.x, v.y, v.z)
+        q_conj = self.conjugate()
+        q_result = self * q_v * q_conj
+        return vec3(q_result.x, q_result.y, q_result.z)
 
 class TriangleMesh:
     def __init__(self):
@@ -181,6 +223,26 @@ class TriangleMesh:
     def add_triangle(self, v1, v2, v3):
         self.index.append((v1, v2, v3))
 
+    def calculate_rotation(self, angleYaw, anglePitch, angleRoll):
+        yaw_rad = math.radians(angleYaw)
+        pitch_rad = math.radians(anglePitch)
+        roll_rad = math.radians(angleRoll)
+        roll_matrix = mat4(math.cos(roll_rad), -math.sin(roll_rad), 0, 0,
+                           math.sin(roll_rad), math.cos(roll_rad), 0, 0,
+                           0, 0, 1, 0,
+                           0, 0, 0, 1)
+
+        pitch_matrix = mat4(1, 0, 0, 0,
+                            0, math.cos(pitch_rad), -math.sin(pitch_rad), 0,
+                            0, math.sin(pitch_rad), math.cos(pitch_rad), 0,
+                            0, 0, 0, 1)
+
+        yaw_matrix = mat4(math.cos(yaw_rad), 0, math.sin(yaw_rad), 0,
+                          0, 1, 0, 0,
+                          -math.sin(yaw_rad), 0, math.cos(yaw_rad), 0,
+                          0, 0, 0, 1)
+        return roll_matrix.matrixMultiplication(pitch_matrix.matrixMultiplication(yaw_matrix))
+
     def scale(self, scaleFactor):
         scale_matrix = mat4(scaleFactor, 0, 0, 0,
                             0, scaleFactor, 0, 0,
@@ -188,30 +250,85 @@ class TriangleMesh:
                             0, 0, 0, 1)
         self.model_matrix = self.model_matrix.matrixMultiplication(scale_matrix)
 
+    def euler_intrinsic(self, yaw, pitch, roll):
+        yaw_rad = math.radians(yaw)
+        pitch_rad = math.radians(pitch)
+        roll_rad = math.radians(roll)
 
-    def pitch(self, angle):
-        angle_rad = math.radians(angle)
-        rotation_matrix = mat4(1, 0, 0, 0,
-                               0, math.cos(angle_rad), -math.sin(angle_rad), 0,
-                               0, math.sin(angle_rad), math.cos(angle_rad), 0,
-                               0, 0, 0, 1)
-        self.model_matrix = self.model_matrix.matrixMultiplication(rotation_matrix)
+        roll_matrix = mat4(math.cos(roll_rad), -math.sin(roll_rad), 0, 0,
+                           math.sin(roll_rad), math.cos(roll_rad), 0, 0,
+                           0, 0, 1, 0,
+                           0, 0, 0, 1)
 
-    def yaw(self, angle):
-        angle_rad = math.radians(angle)
-        rotation_matrix = mat4(math.cos(angle_rad), 0, math.sin(angle_rad), 0,
-                               0, 1, 0, 0,
-                               -math.sin(angle_rad), 0, math.cos(angle_rad), 0,
-                               0, 0, 0, 1)
-        self.model_matrix = self.model_matrix.matrixMultiplication(rotation_matrix)
+        pitch_matrix = mat4(1, 0, 0, 0,
+                            0, math.cos(pitch_rad), -math.sin(pitch_rad), 0,
+                            0, math.sin(pitch_rad), math.cos(pitch_rad), 0,
+                            0, 0, 0, 1)
 
-    def roll(self, angle):
+        yaw_matrix = mat4(math.cos(yaw_rad), 0, math.sin(yaw_rad), 0,
+                          0, 1, 0, 0,
+                          -math.sin(yaw_rad), 0, math.cos(yaw_rad), 0,
+                          0, 0, 0, 1)
+
+        self.model_matrix = yaw_matrix.matrixMultiplication(pitch_matrix).matrixMultiplication(roll_matrix).matrixMultiplication(self.model_matrix)
+
+    def euler_extrinsic(self, yaw, pitch, roll):
+        yaw_rad = math.radians(yaw)
+        pitch_rad = math.radians(pitch)
+        roll_rad = math.radians(roll)
+
+        roll_matrix = mat4(math.cos(roll_rad), -math.sin(roll_rad), 0, 0,
+                           math.sin(roll_rad), math.cos(roll_rad), 0, 0,
+                           0, 0, 1, 0,
+                           0, 0, 0, 1)
+
+        pitch_matrix = mat4(1, 0, 0, 0,
+                            0, math.cos(pitch_rad), -math.sin(pitch_rad), 0,
+                            0, math.sin(pitch_rad), math.cos(pitch_rad), 0,
+                            0, 0, 0, 1)
+
+        yaw_matrix = mat4(math.cos(yaw_rad), 0, math.sin(yaw_rad), 0,
+                          0, 1, 0, 0,
+                          -math.sin(yaw_rad), 0, math.cos(yaw_rad), 0,
+                          0, 0, 0, 1)
+
+        self.model_matrix = self.model_matrix.matrixMultiplication(roll_matrix).matrixMultiplication(pitch_matrix).matrixMultiplication(yaw_matrix)
+    
+    def exponential_map(self, axis, angle):
+        axis = axis.normalize()
+        x, y, z = axis.x, axis.y, axis.z
         angle_rad = math.radians(angle)
-        rotation_matrix = mat4(math.cos(angle_rad), -math.sin(angle_rad), 0, 0,
-                               math.sin(angle_rad), math.cos(angle_rad), 0, 0,
-                               0, 0, 1, 0,
-                               0, 0, 0, 1)
+
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        one_minus_cos_a = 1 - cos_a
+
+        rotation_matrix = mat4(
+            cos_a + x * x * one_minus_cos_a, x * y * one_minus_cos_a - z * sin_a, x * z * one_minus_cos_a + y * sin_a, 0,
+            y * x * one_minus_cos_a + z * sin_a, cos_a + y * y * one_minus_cos_a, y * z * one_minus_cos_a - x * sin_a, 0,
+            z * x * one_minus_cos_a - y * sin_a, z * y * one_minus_cos_a + x * sin_a, cos_a + z * z * one_minus_cos_a, 0,
+            0, 0, 0, 1
+        )
+
         self.model_matrix = self.model_matrix.matrixMultiplication(rotation_matrix)
+    
+    def exponential_mapFunction(self, axis, angle):
+        axis = axis.normalize()
+        x, y, z = axis.x, axis.y, axis.z
+        angle_rad = math.radians(angle)
+
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        one_minus_cos_a = 1 - cos_a
+
+        rotation_matrix = mat4(
+            cos_a + x * x * one_minus_cos_a, x * y * one_minus_cos_a - z * sin_a, x * z * one_minus_cos_a + y * sin_a, 0,
+            y * x * one_minus_cos_a + z * sin_a, cos_a + y * y * one_minus_cos_a, y * z * one_minus_cos_a - x * sin_a, 0,
+            z * x * one_minus_cos_a - y * sin_a, z * y * one_minus_cos_a + x * sin_a, cos_a + z * z * one_minus_cos_a, 0,
+            0, 0, 0, 1
+        )
+
+        return rotation_matrix
     
     def translate(self, tx, ty, tz):
         translation_matrix = mat4(1, 0, 0, tx,
@@ -223,3 +340,4 @@ class TriangleMesh:
     def apply_transformation(self):
         for i in range(len(self.vertex)):
             self.vertex[i] = self.model_matrix.vectorMultiplication(self.vertex[i].hom()).toCartesian()
+

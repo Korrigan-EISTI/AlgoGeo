@@ -12,6 +12,12 @@ def draw_triangles(screen, triangles):
 def draw_points(screen, points):
     for point in points:
         pygame.draw.circle(screen, (0, 0, 255), (int(point.getX()), int(point.getY())), 5)
+        
+def drawVoronoi(screen, edges):
+    for edge in edges:
+        pygame.draw.line(screen, (0, 255, 0), (edge[0].getX(), edge[0].getY()), (edge[1].getX(), edge[1].getY()), 2)
+        pygame.draw.circle(screen, (0, 255, 0), (int(edge[0].getX()), int(edge[0].getY())), 5)
+        pygame.draw.circle(screen, (0, 255, 0), (int(edge[1].getX()), int((edge[1].getY()))), 5)
 
 def draw_circumcircles(screen, triangles):
     for triangle in triangles:
@@ -30,6 +36,7 @@ running = True
 
 # Initialisation de la triangulation avec le triangle initial
 triangulation = dataStructuresTriangulation.Triangulation()
+voronoi = dataStructuresTriangulation.Voronoi()
 
 screen.fill((255, 255, 255))
 draw_points(screen, triangulation.hull.points)
@@ -44,10 +51,14 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
 
-                triangulation.delaunayIncremental()
+                edges = voronoi.computeVoronoiDiagram(triangulation)
+                #triangulation.slowDelaunay()
+                #triangulation.delaunayIncremental()
                 screen.fill((255, 255, 255))
-                draw_points(screen, triangulation.hull.points)
                 draw_triangles(screen, triangulation.triangles)
+                draw_points(screen, triangulation.hull.points)
+                #draw_circumcircles(screen, triangulation.triangles)
+                drawVoronoi(screen, edges)
 
     pygame.display.flip()  # Rafraîchir l'écran
 

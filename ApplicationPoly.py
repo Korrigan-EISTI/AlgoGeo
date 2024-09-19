@@ -66,7 +66,6 @@ hasPolygon = False
 isFinished = False
 poly = None
 while running:
-    screen.fill((255, 255, 255))
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -76,6 +75,9 @@ while running:
             if event.key == pygame.K_n:
                 hasPolygon = False
                 isFinished = False
+                poly = None
+                screen.fill((255, 255, 255))  # Clear screen when creating new polygon
+                pygame.display.flip()  # Refresh display
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
@@ -108,7 +110,12 @@ while running:
                     pygame.display.flip()
                     isFinished = True
 
-    pygame.display.flip()
+    # Redraw the polygon segments and polygon outline in every frame
+    if poly and hasPolygon:
+        draw_segments(screen, poly)
+        if isFinished:
+            draw_polygon(screen, poly)
+        pygame.display.flip()
 
 pygame.quit()
 sys.exit()

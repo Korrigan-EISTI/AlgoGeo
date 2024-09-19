@@ -6,6 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from convexHull import HullConvex
 import dataStructuresPoly
 import time
+import pygame
 
 
 class Triangle:
@@ -111,9 +112,11 @@ class Triangle:
 
 
 class Triangulation:
-    def __init__(self):
+    def __init__(self, screen):
         self.triangles = []
         self.hull = HullConvex()
+        self.screen = screen
+        self.stepByStep = False
 
     def findTriangleThatContainsPoint(self, point):
         for triangle in self.triangles:
@@ -132,6 +135,13 @@ class Triangulation:
         for i in range(len(segments)):
             triangle = Triangle(reference_point, segments[i].p1, segments[i].p2)
             self.triangles.append(triangle)
+            
+            if self.stepByStep:
+                screen.fill((255, 255, 255))
+                draw_triangles(self.screen, self.triangles)
+                draw_points(self.screen, self.hull.points)
+                pygame.display.flip()
+                pygame.time.wait(100)
         
         self.updateNeighbours()
         self.insertConvexAllPoints(convex_hull_points, segments)
@@ -159,6 +169,13 @@ class Triangulation:
         for point in points :
             if not self.isOnConvexHull(point, segments) : 
                 self.insertPointIntoTriangulation(point)
+                
+                if self.stepByStep:
+                    screen.fill((255, 255, 255))
+                    draw_triangles(self.screen, self.triangles)
+                    draw_points(self.screen, self.hull.points)
+                    pygame.display.flip()
+                    pygame.time.wait(100)
 
     def insertPointIntoTriangulation(self, point, isIncremental = False):
         triangle_containing_point = self.findTriangleThatContainsPoint(point)
@@ -245,10 +262,9 @@ class Triangulation:
                     
                     # Check if this point is inside the circumcircle of the current triangle
                     if triangle.isPointInsideCircumcircle(opposite_point_in_neighbor):
-                        print(f"\t fliping de l'edge [({shared_edge[0].x}, {shared_edge[0].y}) --> ({shared_edge[1].x}, {shared_edge[1].y})]")
+                        #print(f"\t fliping de l'edge [({shared_edge[0].x}, {shared_edge[0].y}) --> ({shared_edge[1].x}, {shared_edge[1].y})]")
                         # Flip the edge between the two triangles
                         self.flipEdge(triangle, neighbor_triangle, shared_edge, isIncremental)
-                        
                                                 
     def shouldFlipEdge(self, triangle1, triangle2, edge):
         # Vérifiez si le point opposé dans l'autre triangle est à l'intérieur du cercle circonscrit
@@ -310,6 +326,13 @@ class Triangulation:
 
         self.removeTriangle(triangle1)
         self.removeTriangle(triangle2)
+        
+        if self.stepByStep:
+            screen.fill((255, 255, 255))
+            draw_triangles(self.screen, self.triangles)
+            draw_points(self.screen, self.hull.points)
+            pygame.display.flip()
+            pygame.time.wait(100)
         
         # Mettre à jour les voisins pour l'ensemble des triangles après le flip
         self.updateNeighbours()
@@ -385,6 +408,11 @@ class Triangulation:
     def slowDelaunay(self):
         self.triangulateConvexHull()
         self.delaunayCheck()
+        screen.fill((255, 255, 255))
+        draw_triangles(self.screen, self.triangles)
+        draw_points(self.screen, self.hull.points)
+        pygame.display.flip()
+        pygame.time.wait(100)
 
     def createSuperTriangle(self):
         points = self.hull.points
@@ -410,14 +438,26 @@ class Triangulation:
         return super_triangle
 
     def delaunayIncremental(self):
-        start = time.time()
         super_triangle = self.createSuperTriangle()
+        
+        if self.stepByStep:
+            screen.fill((255, 255, 255))
+            draw_triangles(self.screen, self.triangles)
+            draw_points(self.screen, self.hull.points)
+            pygame.display.flip()
+            pygame.time.wait(100)
+        
         for i,point in enumerate(self.hull.points):
             print(f"{i} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y}")
             self.insertPointIntoTriangulation(point, True)
+            
         self.removeSuperTriangle(super_triangle)
         
-        print ((time.time() - start))
+        screen.fill((255, 255, 255))
+        draw_triangles(self.screen, self.triangles)
+        draw_points(self.screen, self.hull.points)
+        pygame.display.flip()
+        pygame.time.wait(100)
 
     def removeSuperTriangle(self, super_triangle):
         super_points = super_triangle.points
@@ -501,9 +541,88 @@ class Voronoi:
         
         return [(circumcenter, far_point)]
 
+def draw_triangles(screen, triangles):
+    for triangle in triangles:
+        points = triangle.points
+        pygame.draw.line(screen, (0, 0, 0), (points[0].getX(), points[0].getY()), (points[1].getX(), points[1].getY()), 2)
+        pygame.draw.line(screen, (0, 0, 0), (points[1].getX(), points[1].getY()), (points[2].getX(), points[2].getY()), 2)
+        pygame.draw.line(screen, (0, 0, 0), (points[2].getX(), points[2].getY()), (points[0].getX(), points[0].getY()), 2)
+
+def draw_points(screen, points):
+    for point in points:
+        pygame.draw.circle(screen, (0, 0, 255), (int(point.getX()), int(point.getY())), 5)
+        
+def drawVoronoi(screen, edges):
+    for edge in edges:
+        pygame.draw.line(screen, (0, 255, 0), (edge[0].getX(), edge[0].getY()), (edge[1].getX(), edge[1].getY()), 2)
+        pygame.draw.circle(screen, (0, 255, 0), (int(edge[0].getX()), int(edge[0].getY())), 5)
+        pygame.draw.circle(screen, (0, 255, 0), (int(edge[1].getX()), int((edge[1].getY()))), 5)
+
+def draw_circumcircles(screen, triangles):
+    for triangle in triangles:
+        center, radius = triangle.circumcenter()
+        if center and radius > 0:
+            pygame.draw.circle(screen, (255, 0, 0), (int(center.getX()), int(center.getY())), int(radius), 1)
+
+# Initialisation de pygame
+pygame.init()
+
+width, height = 1280, 720
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("Dessin et événements avec Pygame")
+
+running = True
+isLaunched = False
+
+if len(sys.argv) < 2:
+    print("USAGE : dataStructureTriangulation.py <type> <option> \n"
+          "\t <type> :\n"
+          "\t\t -n : naive triangulation\n"
+          "\t\t -d : slow delaunay\n"
+          "\t\t -i : delaunay incremental\n"
+          "\t\t -v : Voronoi Diagram\n"
+          "\t <option> : \n"
+          "\t\t -s : step by step")
+    sys.exit()
     
+triangulation = Triangulation(screen)
+voronoi = Voronoi()
 
+stepByStep = '-s' in sys.argv
+naive = '-n' in sys.argv
+v = '-v' in sys.argv
+slow = '-d' in sys.argv
+inc = '-i' in sys.argv
+screen.fill((255, 255, 255))
+# Boucle principale
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                if not isLaunched:
+                    isLaunched = True
+                if isLaunched:
+                    if stepByStep:
+                            triangulation.stepByStep = True
+                    if naive:
+                        triangulation.triangulateConvexHull()
+                    elif slow:
+                        triangulation.slowDelaunay()
+                    elif inc:
+                        triangulation.delaunayIncremental()
+                    elif v:
+                        edges = voronoi.computeVoronoiDiagram(triangulation)
+                        drawVoronoi(screen, edges)
+                    
+    pygame.display.flip()
 
+pygame.quit()
+sys.exit()
 
 
 

@@ -35,11 +35,10 @@ pygame.display.set_caption("Dessin et événements avec Pygame")
 running = True
 
 # Initialisation de la triangulation avec le triangle initial
-triangulation = dataStructuresTriangulation.Triangulation()
+triangulation = dataStructuresTriangulation.Triangulation(screen)
 voronoi = dataStructuresTriangulation.Voronoi()
 
 screen.fill((255, 255, 255))
-draw_points(screen, triangulation.hull.points)
 # Boucle principale
 while running:
     for event in pygame.event.get():
@@ -51,14 +50,14 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
 
-                edges = voronoi.computeVoronoiDiagram(triangulation)
+                #edges = voronoi.computeVoronoiDiagram(triangulation)
                 #triangulation.slowDelaunay()
-                #triangulation.delaunayIncremental()
-                screen.fill((255, 255, 255))
+                triangulation.delaunayIncremental()
+                '''screen.fill((255, 255, 255))
                 draw_triangles(screen, triangulation.triangles)
                 draw_points(screen, triangulation.hull.points)
-                #draw_circumcircles(screen, triangulation.triangles)
-                drawVoronoi(screen, edges)
+                #draw_circumcircles(screen, triangulation.triangles)'''
+                #drawVoronoi(screen, edges)
 
     pygame.display.flip()  # Rafraîchir l'écran
 

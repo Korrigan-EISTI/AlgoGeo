@@ -126,7 +126,7 @@ class Triangulation:
 
 
     def triangulateConvexHull(self):
-        self.hull.extremeEdges()
+        self.hull.graham()
         convex_hull_points = self.hull.points
         
         reference_point = min(self.hull.points, key=lambda p : p.getY())
@@ -222,49 +222,43 @@ class Triangulation:
         for point in internal_points:
             self.insertPointIntoTriangulation(point)
 
-    def delaunayCheck(self, t = None):
+    def delaunayCheck(self, t=None):
         stack = []
-        isIncremental = False
-        # Find all triangles where a point from the hull lies inside the circumcircle
-        if t == None:
-            for point in self.hull.points:
-                for triangle in self.triangles:
-                    if triangle.isPointInsideCircumcircle(point):
-                        stack.append(triangle)
-        else :
-            isIncremental = True
-            for point in self.hull.points:
-                if t.isPointInsideCircumcircle(point):
-                    stack.append(t)
-        
-        # Process the stack and flip edges where necessary
+        for point in self.hull.points:
+            if t.isPointInsideCircumcircle(point):
+                stack.append(t)
+        self.checkDelaunayCondition(stack, True)
+
+    def getStack(self):
+        stack = []
+        for point in self.hull.points:
+            for triangle in self.triangles:
+                if triangle.isPointInsideCircumcircle(point):
+                    stack.append(triangle)
+        return stack
+
+    def checkDelaunayCondition(self, stack, isIncremental):
         while stack:
             triangle = stack.pop()
-            
-            
-            if not triangle in self.triangles:
+
+            if triangle not in self.triangles:
                 continue
-            
+
             for i, neighbor_index in enumerate(triangle.neighbours):
                 if neighbor_index == -1:
-                    continue  # No neighbor in this direction
-                
+                    continue
+
                 neighbor_triangle = self.triangles[neighbor_index]
                 shared_edge = self.findSharedEdge(triangle, neighbor_triangle)
-                
-                if not neighbor_triangle in self.triangles:
-                    continue
-                
+
                 if shared_edge:
                     opposite_point_in_neighbor = self.getOppositePoint(neighbor_triangle, shared_edge)
                     if opposite_point_in_neighbor is None:
                         continue
-                    
-                    # Check if this point is inside the circumcircle of the current triangle
+
                     if triangle.isPointInsideCircumcircle(opposite_point_in_neighbor):
-                        #print(f"\t fliping de l'edge [({shared_edge[0].x}, {shared_edge[0].y}) --> ({shared_edge[1].x}, {shared_edge[1].y})]")
-                        # Flip the edge between the two triangles
                         self.flipEdge(triangle, neighbor_triangle, shared_edge, isIncremental)
+
                                                 
     def shouldFlipEdge(self, triangle1, triangle2, edge):
         # Vérifiez si le point opposé dans l'autre triangle est à l'intérieur du cercle circonscrit
@@ -336,10 +330,8 @@ class Triangulation:
         
         # Mettre à jour les voisins pour l'ensemble des triangles après le flip
         self.updateNeighbours()
-        
-        if not isIncremental:
-            self.delaunayCheck()
-        else:
+    
+        if isIncremental:
             self.delaunayCheck(new_triangle1)
             self.delaunayCheck(new_triangle2)
 
@@ -378,17 +370,21 @@ class Triangulation:
 
     # Example of updateNeighbours using arePointsEqual to check edge equivalence
     def updateNeighbours(self):
+        # Dictionnaire pour stocker les arêtes et les triangles associés
         edge_to_triangle = {}
 
+        # Parcourir les triangles pour identifier leurs arêtes
         for i, triangle in enumerate(self.triangles):
             points = triangle.points
             for j in range(3):
+                # Identifier une arête en triant les points pour éviter les inversions
                 edge = tuple(sorted([points[j], points[(j + 1) % 3]], key=lambda p: (p.getX(), p.getY())))
                 if edge in edge_to_triangle:
                     edge_to_triangle[edge].append(i)
                 else:
                     edge_to_triangle[edge] = [i]
 
+        # Mise à jour des voisins en fonction des arêtes partagées
         for i, triangle in enumerate(self.triangles):
             points = triangle.points
             neighbours = [-1, -1, -1]
@@ -404,10 +400,14 @@ class Triangulation:
             
             triangle.fillIndexNeighbours(*neighbours)
 
+
         
     def slowDelaunay(self):
         self.triangulateConvexHull()
-        self.delaunayCheck()
+        
+        for triangle in self.triangles:
+            self.delaunayCheck(triangle)
+        
         screen.fill((255, 255, 255))
         draw_triangles(self.screen, self.triangles)
         draw_points(self.screen, self.hull.points)
@@ -448,7 +448,7 @@ class Triangulation:
             pygame.time.wait(100)
         
         for i,point in enumerate(self.hull.points):
-            print(f"{i} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y}")
+            print(f"{i} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y})")
             self.insertPointIntoTriangulation(point, True)
             
         self.removeSuperTriangle(super_triangle)

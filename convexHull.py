@@ -7,9 +7,9 @@ import math
 class HullConvex:
     def __init__(self):
         self.points = []
-        n = random.randint(10, 50)
+        n = random.randint(100, 100)
         for i in range(n):
-            self.points.append(dataStructuresPoly.Point(float(random.randint(600, 800)), float(random.randint(300, 500))))
+            self.points.append(dataStructuresPoly.Point(float(random.randint(100, 1180)), float(random.randint(100, 620))))
         self.segments = []
         self.current_step = 0
         self.hull = []

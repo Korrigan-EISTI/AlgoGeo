@@ -40,6 +40,11 @@ class Triangle:
             return True
         return False
 
+    def isDegenerate(self):
+        p1, p2, p3 = self.points
+        # Check if the points are collinear using the orientation method
+        return self.orientation(p1, p2, p3) == 0
+    
     
     def circumcenter(self):
         p1, p2, p3 = self.points
@@ -101,7 +106,6 @@ class Triangle:
     def isPointInsideCircumcircle(self, point):
         center, radius = self.circumcenter()
         if center is None:
-            # Le triangle est dégénéré (points colinéaires)
             return False
 
         distance = self.distance(center, point)
@@ -166,8 +170,10 @@ class Triangulation:
         return False
     
     def insertConvexAllPoints(self, points, segments):
+        i = 0
         for point in points :
-            if not self.isOnConvexHull(point, segments) : 
+            print(f"{i + 1} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y})")
+            if not self.isOnConvexHull(point, segments) :
                 self.insertPointIntoTriangulation(point)
                 
                 if self.stepByStep:
@@ -176,35 +182,41 @@ class Triangulation:
                     draw_points(self.screen, self.hull.points)
                     pygame.display.flip()
                     pygame.time.wait(100)
+            i += 1
 
-    def insertPointIntoTriangulation(self, point, isIncremental = False):
+    def insertPointIntoTriangulation(self, point, isIncremental=False):
         triangle_containing_point = self.findTriangleThatContainsPoint(point)
         if not triangle_containing_point:
-            print("Le point n'est pas dans la triangulation.")
+            print(f"Le point ({point.x},{point.y}) n'est pas dans la triangulation.")
             return
-
-        self.triangles.remove(triangle_containing_point)
 
         p1, p2, p3 = triangle_containing_point.points
 
         new_triangle1 = Triangle(p1, p2, point)
         new_triangle2 = Triangle(p2, p3, point)
         new_triangle3 = Triangle(p3, p1, point)
-        
+
+        # Skip degenerate triangles
+        if new_triangle1.isDegenerate() or new_triangle2.isDegenerate() or new_triangle3.isDegenerate():
+            print("Triangle dégénéré trouvé, il ne sera pas ajouté.")
+            return
+
         idx1 = len(self.triangles)
         idx2 = idx1 + 1
         idx3 = idx2 + 1
-        
+
         neighbours = triangle_containing_point.neighbours
-        
+
         new_triangle1.fillIndexNeighbours(neighbours[0], idx2, idx3)
         new_triangle2.fillIndexNeighbours(idx1, neighbours[1], idx3)
         new_triangle3.fillIndexNeighbours(idx1, idx2, neighbours[2])
         
+        self.triangles.remove(triangle_containing_point)
+
         self.triangles.extend([new_triangle1, new_triangle2, new_triangle3])
 
         self.updateNeighbours()
-        
+
         if isIncremental:
             self.delaunayCheck(new_triangle1)
             self.delaunayCheck(new_triangle2)
@@ -284,42 +296,28 @@ class Triangulation:
             return shared_points
         return None
 
-    def flipEdge(self, triangle1, triangle2, shared_edge, isIncremental = False):
+    def flipEdge(self, triangle1, triangle2, shared_edge, isIncremental=False):
         p1, p2 = shared_edge
         opposite_point1 = self.getOppositePoint(triangle1, shared_edge)
         opposite_point2 = self.getOppositePoint(triangle2, shared_edge)
-        
-        # Créer les nouveaux triangles après le flip
+
         new_triangle1 = Triangle(opposite_point1, p1, opposite_point2)
         new_triangle2 = Triangle(opposite_point1, p2, opposite_point2)
 
-        # Indices des triangles actuels
+        # Skip flip if new triangles are degenerate
+        if new_triangle1.isDegenerate() or new_triangle2.isDegenerate():
+            print("Flip ignoré car cela créerait un triangle dégénéré.")
+            return
+
         idx_triangle1 = self.triangleIndex(triangle1)
         idx_triangle2 = self.triangleIndex(triangle2)
 
-        # Supprimer les anciens triangles (triangle1 et triangle2)
+        # Replace old triangles with new triangles
         self.triangles[idx_triangle1] = new_triangle1
         self.triangles[idx_triangle2] = new_triangle2
 
-        # Récupérer les voisins des anciens triangles
-        shared_edge_neighbors1 = triangle1.neighbours[triangle1.points.index(p1)]
-        shared_edge_neighbors2 = triangle2.neighbours[triangle2.points.index(p2)]
-
-        # Mettre à jour les voisins des nouveaux triangles
-        new_triangle1.fillIndexNeighbours(shared_edge_neighbors1, idx_triangle2, triangle1.neighbours[triangle1.points.index(opposite_point1)])
-        new_triangle2.fillIndexNeighbours(idx_triangle1, shared_edge_neighbors2, triangle2.neighbours[triangle2.points.index(opposite_point2)])
-
-        # Mettre à jour les voisins des anciens voisins pour pointer vers les nouveaux triangles
-        if shared_edge_neighbors1 != -1:
-            neighbour_triangle = self.triangles[shared_edge_neighbors1]
-            neighbour_triangle.neighbours[self.neighboursIndex(idx_triangle1)] = idx_triangle2
-        
-        if shared_edge_neighbors2 != -1:
-            neighbour_triangle = self.triangles[shared_edge_neighbors2]
-            neighbour_triangle.neighbours[self.neighboursIndex(idx_triangle2)] = idx_triangle1
-
-        self.removeTriangle(triangle1)
-        self.removeTriangle(triangle2)
+        # Update neighbours and continue with flip process
+        self.updateNeighbours()
         
         if self.stepByStep:
             screen.fill((255, 255, 255))
@@ -327,10 +325,7 @@ class Triangulation:
             draw_points(self.screen, self.hull.points)
             pygame.display.flip()
             pygame.time.wait(100)
-        
-        # Mettre à jour les voisins pour l'ensemble des triangles après le flip
-        self.updateNeighbours()
-    
+
         if isIncremental:
             self.delaunayCheck(new_triangle1)
             self.delaunayCheck(new_triangle2)
@@ -429,9 +424,9 @@ class Triangulation:
         mid_y = (min_y + max_y) / 2
 
         # Créer un super-triangle
-        p1 = dataStructuresPoly.Point(mid_x - 3 * deltaMax, mid_y - deltaMax)
+        p1 = dataStructuresPoly.Point(mid_x - 6 * deltaMax, mid_y - deltaMax)
         p2 = dataStructuresPoly.Point(mid_x, mid_y + deltaMax)
-        p3 = dataStructuresPoly.Point(mid_x + 3 * deltaMax, mid_y - deltaMax)
+        p3 = dataStructuresPoly.Point(mid_x + 6 * deltaMax, mid_y - deltaMax)
 
         super_triangle = Triangle(p1, p2, p3)
         self.triangles.append(super_triangle)
@@ -448,7 +443,7 @@ class Triangulation:
             pygame.time.wait(100)
         
         for i,point in enumerate(self.hull.points):
-            print(f"{i} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y})")
+            print(f"{i + 1} / {len(self.hull.points)} : Inserting point ({point.x}, {point.y})")
             self.insertPointIntoTriangulation(point, True)
             
         self.removeSuperTriangle(super_triangle)

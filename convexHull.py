@@ -7,7 +7,7 @@ import math
 class HullConvex:
     def __init__(self):
         self.points = []
-        n = random.randint(100, 100)
+        n = random.randint(50, 50)
         for i in range(n):
             self.points.append(dataStructuresPoly.Point(float(random.randint(100, 1180)), float(random.randint(100, 620))))
         self.segments = []
@@ -22,9 +22,9 @@ class HullConvex:
         pi, pj = self.extremeEdges_step
 
         if pi >= len(self.points) or pj >= len(self.points):
+            # Make sure to stop if either index exceeds the length of points
             return
 
-        
         p1 = self.points[pi]
         p2 = self.points[pj]
 
@@ -43,9 +43,15 @@ class HullConvex:
                 self.segments = self.current_segments
                 self.current_point = None
                 return
+
+        # Safeguard boundary check before assigning current points
+        if pi < len(self.points) and pj < len(self.points):
+            self.current_point = (self.points[pi], self.points[pj])
+        else:
+            self.current_point = None
+
         # Met à jour les indices et le point courant
         self.extremeEdges_step = (pi, pj)
-        self.current_point = (self.points[pi], self.points[pj])
 
 
     
@@ -69,43 +75,49 @@ class HullConvex:
             self.lowestPoint = min(self.points, key=lambda p: p.getX())
             self.p1 = self.lowestPoint
             self.current_segments = []  # Initialize segments list
+            self.current_point = self.lowestPoint
 
-        if self.current_step >= len(self.points):
-            if self.p1 != self.lowestPoint:
-                self.hull.append(self.lowestPoint)
-                # Close the hull by connecting the last point to the first point
-                self.segments = [dataStructuresPoly.Segment(self.hull[i].getX(), self.hull[(i + 1) % len(self.hull)].getX(), 
-                                                            self.hull[i].getY(), self.hull[(i + 1) % len(self.hull)].getY()) 
-                                for i in range(len(self.hull))]
-                self.current_segments = self.segments
+        if self.p1 == self.lowestPoint and len(self.hull) > 1:
+            # If we have wrapped around and returned to the start, terminate
+            self.hull.append(self.lowestPoint)
+            self.segments = [dataStructuresPoly.Segment(self.hull[i].getX(), self.hull[(i + 1) % len(self.hull)].getX(),
+                                                        self.hull[i].getY(), self.hull[(i + 1) % len(self.hull)].getY())
+                            for i in range(len(self.hull))]
+            self.current_segments = self.segments
             return
 
-        self.hull.append(self.p1)
-        q = self.points[0]
+        self.hull.append(self.p1)  # Add the current point to the hull
+        next_point = None
 
-        for r in self.points:
-            if q == self.p1:
-                q = r
-            elif self.orientation(self.p1, q, r) > 0 or (self.orientation(self.p1, q, r) == 0 and self.distance(self.p1, r) > self.distance(self.p1, q)):
-                q = r
+        for candidate_point in self.points:
+            if candidate_point == self.p1:
+                continue  # Skip the current point
 
+            if next_point is None:
+                next_point = candidate_point
+            else:
+                # Find the most counterclockwise point
+                orient = self.orientation(self.p1, next_point, candidate_point)
+                if orient > 0 or (orient == 0 and self.distance(self.p1, candidate_point) > self.distance(self.p1, next_point)):
+                    next_point = candidate_point
+
+        if next_point is not None:
+            self.p1 = next_point
+            self.current_point = next_point  # Update current point for visualization
+        else:
+            # Safety check: If no valid next point is found, break to prevent infinite loop
+            print("No valid next point found, breaking out.")
+            return
+
+        # Draw segments after every step
         if len(self.hull) > 1:
-            self.current_segments = [dataStructuresPoly.Segment(self.hull[i].getX(), self.hull[(i + 1) % len(self.hull)].getX(), 
-                                                                self.hull[i].getY(), self.hull[(i + 1) % len(self.hull)].getY()) 
+            self.current_segments = [dataStructuresPoly.Segment(self.hull[i].getX(), self.hull[(i + 1) % len(self.hull)].getX(),
+                                                                self.hull[i].getY(), self.hull[(i + 1) % len(self.hull)].getY())
                                     for i in range(len(self.hull))]
 
-        self.current_point = q
-        self.p1 = q
         self.current_step += 1
 
-        if self.p1 == self.lowestPoint:
-            # Close the hull by connecting the last point to the first point
-            if len(self.hull) > 1:
-                self.hull.append(self.lowestPoint)
-                self.segments = [dataStructuresPoly.Segment(self.hull[i].getX(), self.hull[(i + 1) % len(self.hull)].getX(), 
-                                                            self.hull[i].getY(), self.hull[(i + 1) % len(self.hull)].getY()) 
-                                for i in range(len(self.hull))]
-                self.current_segments = self.segments
+
 
     def jarvis(self):
         self.hull = []
@@ -268,7 +280,9 @@ def __main__():
 
     running = True
     isCreated = False
+    isAnimating = False  # New flag to track animation state
     screen.fill((255, 255, 255))
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -277,40 +291,61 @@ def __main__():
                 if event.key == pygame.K_ESCAPE:
                     running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    if executeExtremeEdge and not isCreated: 
+                if event.button == 1 and not isAnimating:  # Start animation on the first click
+                    if executeExtremeEdge and not isCreated:
                         if stepByStep:
-                            hullConvex.stepExtremeEdges()
-                            screen.fill((255, 255, 255))  # Efface l'écran
-                            draw_points(screen, hullConvex.points, hullConvex.current_point)
-                            draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
-                            pygame.display.flip()  # Rafraîchit l'affichage
+                            isAnimating = True  # Set animating flag
                         else:
                             hullConvex.extremeEdges()
                             isCreated = True
-
                     elif executeJarvis and not isCreated:
                         if stepByStep:
-                            hullConvex.stepJarvis()
-                            if not hullConvex.segments:
-                                screen.fill((255, 255, 255))  # Efface l'écran
-                                draw_points(screen, hullConvex.points, (hullConvex.p1, hullConvex.current_point))
-                                draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
-                                pygame.display.flip()  # Rafraîchit l'affichage
+                            isAnimating = True  # Set animating flag
                         else:
                             hullConvex.jarvis()
                             isCreated = True
                     elif executeGraham and not isCreated:
                         if stepByStep:
-                            hullConvex.stepGraham()
-                            if not hullConvex.segments:
-                                screen.fill((255, 255, 255))  # Efface l'écran
-                                draw_points(screen, hullConvex.points, (hullConvex.lowest_point, hullConvex.current_point))
-                                draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
-                                pygame.display.flip()  # Rafraîchit l'affichage
+                            isAnimating = True  # Set animating flag
                         else:
                             hullConvex.graham()
                             isCreated = True
+
+        # Animation loop: perform steps if animation is ongoing
+        if isAnimating:
+            if executeExtremeEdge and not isCreated:
+                hullConvex.stepExtremeEdges()
+                if not hullConvex.segments:
+                    screen.fill((255, 255, 255))  # Efface l'écran
+                    draw_points(screen, hullConvex.points, hullConvex.current_point)
+                    draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
+                    pygame.display.flip()  # Rafraîchit l'affichage
+                    pygame.time.wait(100)
+                else:
+                    isCreated = True  # Stop the animation once completed
+                    isAnimating = False  # Reset animation flag
+            elif executeJarvis and not isCreated:
+                hullConvex.stepJarvis()
+                if not hullConvex.segments:
+                    screen.fill((255, 255, 255))  # Efface l'écran
+                    draw_points(screen, hullConvex.points, (hullConvex.p1, hullConvex.current_point))
+                    draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
+                    pygame.display.flip()  # Rafraîchit l'affichage
+                    pygame.time.wait(100)
+                else:
+                    isCreated = True  # Stop the animation once completed
+                    isAnimating = False  # Reset animation flag
+            elif executeGraham and not isCreated:
+                hullConvex.stepGraham()
+                if not hullConvex.segments:
+                    screen.fill((255, 255, 255))  # Efface l'écran
+                    draw_points(screen, hullConvex.points, (hullConvex.lowest_point, hullConvex.current_point))
+                    draw_segments(screen, hullConvex.current_segments)  # Dessine les segments jusqu'à l'étape actuelle
+                    pygame.display.flip()  # Rafraîchit l'affichage
+                    pygame.time.wait(100)
+                else:
+                    isCreated = True  # Stop the animation once completed
+                    isAnimating = False  # Reset animation flag
 
         # Affichage des points
         if not stepByStep:
@@ -324,6 +359,7 @@ def __main__():
         
     pygame.quit()
     sys.exit()
+
 
     
 if __name__ == '__main__':

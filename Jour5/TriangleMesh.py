@@ -4,6 +4,48 @@ import dataStructure3D
 import scene
 import math
 
+def euler_to_quaternion(yaw, pitch, roll):
+    yaw_rad = math.radians(yaw)
+    pitch_rad = math.radians(pitch)
+    roll_rad = math.radians(roll)
+    qx = dataStructure3D.Quaternion.from_axis_angle(dataStructure3D.vec3(1, 0, 0), pitch_rad)
+    qy = dataStructure3D.Quaternion.from_axis_angle(dataStructure3D.vec3(0, 1, 0), yaw_rad)
+    qz = dataStructure3D.Quaternion.from_axis_angle(dataStructure3D.vec3(0, 0, 1), roll_rad)
+    return qy.multiply(qx).multiply(qz)
+
+def matrix_to_euler(matrix):
+    yaw = math.atan2(matrix.mat[1][0], matrix.mat[0][0])
+    pitch = math.asin(-matrix.mat[2][0])
+    roll = math.atan2(matrix.mat[2][1], matrix.mat[2][2])
+    return math.degrees(yaw), math.degrees(pitch), math.degrees(roll)
+
+def quaternion_to_matrix(quat):
+    return quat.to_rotation_matrix()
+
+# Slerp function for quaternions
+def quaternion_slerp(q1, q2, t):
+    dot_product = q1.dot(q2)
+    
+    # If the dot product is negative, invert one quaternion to take the shorter path
+    if dot_product < 0.0:
+        q2 = q2.negate()
+        dot_product = -dot_product
+
+    if dot_product > 0.9995:  # Close enough to linear interpolation
+        result = q1.add(q2.sub(q1).mul(t)).normalize()
+    else:
+        theta_0 = math.acos(dot_product)  # theta_0 is the angle between the input quaternions
+        theta = theta_0 * t               # theta is the angle at the interpolated point
+        sin_theta = math.sin(theta)       # compute the sine of theta
+        sin_theta_0 = math.sin(theta_0)   # compute the sine of theta_0
+
+        s1 = math.sin((1.0 - t) * theta_0) / sin_theta_0
+        s2 = sin_theta / sin_theta_0
+
+        result = q1.mul(s1).add(q2.mul(s2))
+    
+    return result.normalize()
+
 class DrawTriangle:
     def __init__(self):
         self.scene = scene.Scene()
@@ -20,6 +62,73 @@ class DrawTriangle:
         self.globalYaw = 0
         self.globalPitch = 0
         self.globalRoll = 0
+        
+        self.current_quaternion = dataStructure3D.Quaternion(1, 0, 0, 0)  # Identity quaternion
+        # To store the display data
+        self.euler_angles_text = ""
+        self.exp_map_text_yaw = ""
+        self.exp_map_text_pitch = ""
+        self.exp_map_text_roll = ""
+        self.quaternion_text = ""
+        
+        self.intersected_triangle = None  # Store the intersected triangle
+
+    def update_display_data(self):
+        # Exponential map (axis * angle)
+        axis_yaw = dataStructure3D.vec3(0, 1, 0)
+        axis_pitch = dataStructure3D.vec3(1, 0, 0)
+        axis_roll = dataStructure3D.vec3(0, 0, 1)
+
+        # Exponential map angles
+        yaw_angle = self.globalYaw  # En degrés
+        pitch_angle = self.globalPitch  # En degrés
+        roll_angle = self.globalRoll  # En degrés
+
+        # Afficher les angles et les axes associés
+        self.exp_map_text_yaw = (f"ExpMap Yaw: Axis ({axis_yaw.x}, {axis_yaw.y}, {axis_yaw.z}), Angle: {yaw_angle:.2f}°")
+        self.exp_map_text_pitch = (f"ExpMap Pitch: Axis ({axis_pitch.x}, {axis_pitch.y}, {axis_pitch.z}), Angle: {pitch_angle:.2f}°")
+        self.exp_map_text_roll = (f"ExpMap Roll: Axis ({axis_roll.x}, {axis_roll.y}, {axis_roll.z}), Angle: {roll_angle:.2f}°")
+
+        # Calculer les quaternions et afficher
+        self.current_quaternion = euler_to_quaternion(self.globalYaw, self.globalPitch, self.globalRoll)
+        self.quaternion_text = f"Quaternion: {self.current_quaternion.toString()}"
+
+        # Calculer la matrice de rotation et afficher
+        rotation_matrix = self.mesh.calculate_rotation(self.globalYaw, self.globalPitch, self.globalRoll)
+        matrix_str = '\n'.join(rotation_matrix.toString())
+        self.rotation_matrix_text = f"Rotation Matrix:\n{matrix_str}"
+
+        # Afficher les angles d'Euler
+        self.euler_angles_text = f"Yaw: {self.globalYaw:.2f}°, Pitch: {self.globalPitch:.2f}°, Roll: {self.globalRoll:.2f}°"
+
+    def display_rotation_data(self, screen, font):
+        y_offset = 0
+        text_surface = font.render(self.euler_angles_text, True, (0, 0, 0))
+        screen.blit(text_surface, (20, y_offset))
+        y_offset += 20
+
+        text_surface = font.render(self.exp_map_text_yaw, True, (0, 0, 0))
+        screen.blit(text_surface, (20, y_offset))
+        y_offset += 20
+        
+        text_surface = font.render(self.exp_map_text_pitch, True, (0, 0, 0))
+        screen.blit(text_surface, (20, y_offset))
+        y_offset += 20
+        
+        text_surface = font.render(self.exp_map_text_roll, True, (0, 0, 0))
+        screen.blit(text_surface, (20, y_offset))
+        y_offset += 20
+
+        text_surface = font.render(self.quaternion_text, True, (0, 0, 0))
+        screen.blit(text_surface, (20, y_offset))
+        y_offset += 20
+
+        # Afficher la matrice de rotation
+        for line in self.rotation_matrix_text.split('\n'):
+            text_surface = font.render(line, True, (0, 0, 0))
+            screen.blit(text_surface, (20, y_offset))
+            y_offset += 20
+
 
     def should_cull_backface(self, normal, v1):
         view_vector = v1.sub(self.scene.camera_position).normalize()
@@ -52,13 +161,14 @@ class DrawTriangle:
             view_vector = vertex1.sub(cam_pos).normalize()
 
             if normal.dotProduct(view_vector) < 0:
-                continue  
+                continue
 
-            lighting_intensity = self.scene.light.compute_diffuse_light(normal, vertex1)
-            '''if (self.throw_ray(pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1])):
-                color = (min(0, int(255 * lighting_intensity)), 0, 0)
-            else :'''
-            color = (min(255, int(255 * lighting_intensity)), 0, 0)
+            if self.intersected_triangle == (idx1, idx2, idx3):
+                color = (0, 0, 255)  # Highlight the intersected triangle with blue color
+            else:
+                lighting_intensity = self.scene.light.compute_diffuse_light(normal, vertex1)
+                color = (min(255, int(255 * lighting_intensity)), 0, 0)  # Regular red shading for others
+            
             pygame.draw.polygon(screen, color, points_2d, 0)
             
 
@@ -83,6 +193,7 @@ class DrawTriangle:
             return
 
         font = pygame.font.Font(None, 20)
+
         # Calcul des angles de rotation par étape
         theta_yaw = self.globalYaw / iterations
         theta_pitch = self.globalPitch / iterations
@@ -90,94 +201,63 @@ class DrawTriangle:
 
         for i in range(1, iterations + 1):
             screen.fill((255, 255, 255))
-            current_yaw = self.globalYaw - theta_yaw * float(i)
-            current_pitch = self.globalPitch - theta_pitch * float(i)
-            current_roll = self.globalRoll - theta_roll * float(i)
 
-            self.display(screen, font, current_yaw, current_pitch, current_roll)
+            # Calcul des angles actuels en fonction de l'itération
+            current_yaw = self.globalYaw - theta_yaw * i
+            current_pitch = self.globalPitch - theta_pitch * i
+            current_roll = self.globalRoll - theta_roll * i
 
-            current_yaw = math.radians(current_yaw)
-            current_pitch = math.radians(current_pitch)
-            current_roll = math.radians(current_roll)
+            # Conversion des angles actuels en radians
+            current_yaw_rad = math.radians(current_yaw)
+            current_pitch_rad = math.radians(current_pitch)
+            current_roll_rad = math.radians(current_roll)
+
+            self.display_rotation_data(screen, font)
 
             if not isExponential:
-                roll_matrix = dataStructure3D.mat4(math.cos(current_roll), -math.sin(current_roll), 0, 0,
-                                                math.sin(current_roll), math.cos(current_roll), 0, 0,
-                                                0, 0, 1, 0,
-                                                0, 0, 0, 1)
-
-                pitch_matrix = dataStructure3D.mat4(1, 0, 0, 0,
-                                                    0, math.cos(current_pitch), -math.sin(current_pitch), 0,
-                                                    0, math.sin(current_pitch), math.cos(current_pitch), 0,
-                                                    0, 0, 0, 1)
-
-                yaw_matrix = dataStructure3D.mat4(math.cos(current_yaw), 0, math.sin(current_yaw), 0,
-                                                0, 1, 0, 0,
-                                                -math.sin(current_yaw), 0, math.cos(current_yaw), 0, 
-                                                0, 0, 0, 1)
-
-                self.mesh.model_matrix = yaw_matrix.matrixMultiplication(pitch_matrix).matrixMultiplication(roll_matrix)
-            else:
-                # Calcul des matrices de rotation pour la carte exponentielle
+                # Matrices de rotation avec angles d'Euler
+                yaw_matrix = self.mesh.calculate_rotation(current_yaw, current_pitch, current_roll)
+                self.mesh.model_matrix = yaw_matrix
+            elif isEulerAngles:
+                # Rotation en utilisant la carte exponentielle
                 axis_yaw = dataStructure3D.vec3(0, 1, 0)
                 axis_pitch = dataStructure3D.vec3(1, 0, 0)
                 axis_roll = dataStructure3D.vec3(0, 0, 1)
 
-                matrixYaw = self.mesh.exponential_mapFunction(axis_yaw, math.degrees(current_yaw))
-                matrixPitch = self.mesh.exponential_mapFunction(axis_pitch, math.degrees(current_pitch))
-                matrixRoll = self.mesh.exponential_mapFunction(axis_roll, math.degrees(current_roll))
+                matrix_yaw = self.mesh.exponential_mapFunction(axis_yaw, math.degrees(current_yaw_rad))
+                matrix_pitch = self.mesh.exponential_mapFunction(axis_pitch, math.degrees(current_pitch_rad))
+                matrix_roll = self.mesh.exponential_mapFunction(axis_roll, math.degrees(current_roll_rad))
 
-                self.mesh.model_matrix = matrixRoll.matrixMultiplication(matrixPitch.matrixMultiplication(matrixYaw))
+                # Combinaison des matrices de rotation exponentielle
+                self.mesh.model_matrix = matrix_roll.matrixMultiplication(matrix_pitch).matrixMultiplication(matrix_yaw)
+            elif isQuaternions:
+                t = i / iterations
+                interpolated_quat = quaternion_slerp(self.end_quaternion, self.start_quaternion, t)
+                self.mesh.model_matrix = interpolated_quat.to_rotation_matrix()
 
+            # Dessiner les triangles à chaque étape
             self.drawTriangles(screen)
             pygame.display.flip()
+
+            # Attendre un peu pour l'effet visuel
             pygame.time.wait(5)
 
+        # Réinitialisation des angles globaux après la transition
         self.globalYaw, self.globalPitch, self.globalRoll = 0, 0, 0
         self.yaw, self.pitch, self.roll = 0, 0, 0
-        self.mesh.euler_intrinsic(self.globalYaw, self.globalPitch, self.globalRoll)
-
-    def display(self, screen, font, yaw, pitch, roll):
-        tab = self.mesh.calculate_rotation(yaw, pitch, roll).toString()
-        matrix0_angle_text = tab[0]
-        matrix1_angle_text = tab[1]
-        matrix2_angle_text = tab[2]
-        matrix3_angle_text = tab[3]
-        euler_angles_text = f"Yaw: {yaw % 360:.2f}°, Pitch: {pitch % 360:.2f}°, Roll: {roll%360:.2f}°"
-        y_offset = 20
-        text_surface = font.render(matrix0_angle_text, True, (0, 0, 0))
-        screen.blit(text_surface, (20, y_offset))
-        y_offset += 20
-        text_surface = font.render(matrix1_angle_text, True, (0, 0, 0))
-        screen.blit(text_surface, (20, y_offset))
-        y_offset += 20
-        text_surface = font.render(matrix2_angle_text, True, (0, 0, 0))
-        screen.blit(text_surface, (20, y_offset))
-        y_offset += 20
-        text_surface = font.render(matrix3_angle_text, True, (0, 0, 0))
-        screen.blit(text_surface, (20, y_offset))
-        y_offset += 20
-        text_surface = font.render(euler_angles_text, True, (0, 0, 0))
-        screen.blit(text_surface, (20, y_offset))
 
     def throw_ray(self, mouse_x, mouse_y):
-        # Step 1: Convert mouse position to normalized device coordinates (NDC)
         screen_width, screen_height = pygame.display.get_surface().get_size()
         ndc_x = (2.0 * mouse_x) / screen_width - 1.0
-        ndc_y = 1.0 - (2.0 * mouse_y) / screen_height  # Inverted Y-axis for NDC
+        ndc_y = 1.0 - (2.0 * mouse_y) / screen_height
+        
+        ray_clip = dataStructure3D.vec4(ndc_x, ndc_y, -1.0, 1.0)
+        ray_far_clip = dataStructure3D.vec4(ndc_x, ndc_y, 1.0, 1.0)
 
-        # Step 2: Create the ray in view space (using inverse of projection matrix)
-        # Near point (NDC space)
-        ray_clip = dataStructure3D.vec4(ndc_x, ndc_y, -1.0, 1.0)  # Point on near plane
-        # Far point (NDC space)
-        ray_far_clip = dataStructure3D.vec4(ndc_x, ndc_y, 1.0, 1.0)  # Point on far plane
-
-        # Transform ray into world space using inverse view and projection matrices
         viewport_inverse = self.scene.viewport_matrix.inverse()
         inverse_projection = self.scene.projection_matrix.inverse()
         inverse_view = self.scene.view_matrix.inverse()
-
-        # Step 3: Convert the clip space coordinates to world space
+        
         ray_eye = (inverse_projection.matrixMultiplication(viewport_inverse)).vectorMultiplication(ray_clip)
         ray_eye_far = (inverse_projection.matrixMultiplication(viewport_inverse)).vectorMultiplication(ray_far_clip)
 
@@ -186,47 +266,45 @@ class DrawTriangle:
         ray_eye_far.z = 1.0
         ray_eye_far.w = 0.0
 
-        # Step 4: Transform the ray to world space
         ray_world = inverse_view.vectorMultiplication(ray_eye)
         ray_world_far = inverse_view.vectorMultiplication(ray_eye_far)
         ray_direction = ray_world_far.sub(ray_world).normalize()
 
-        # Step 5: Check for intersections with the plane of the triangles
         closest_intersection = None
-        closest_distance = float('inf')
+        self.closest_distance = float('inf')  # Reset the closest distance
+        self.intersected_triangle = None  # Reset intersected triangle
         
         for idx1, idx2, idx3 in self.mesh.index:
             v1 = self.mesh.vertex[idx1]
             v2 = self.mesh.vertex[idx2]
             v3 = self.mesh.vertex[idx3]
 
+            # Check intersection
             intersection, distance = self.ray_intersects_plane(ray_world, ray_direction, v1, v2, v3)
 
-            if intersection and distance < closest_distance:
+            # Update the closest triangle if it's closer than the previously found one
+            if intersection and distance < self.closest_distance:
                 closest_intersection = intersection
-                closest_distance = distance
-
-        return closest_intersection  # Return the closest intersection point, if any
+                self.closest_distance = distance
+                self.intersected_triangle = (idx1, idx2, idx3)  
+                
+        return closest_intersection
 
     def ray_intersects_plane(self, ray_origin, ray_direction, v1, v2, v3):
-        # Step 1: Calculate the normal of the triangle plane
         edge1 = v2.sub(v1)
         edge2 = v3.sub(v1)
         normal = edge1.crossProduct(edge2).normalize()
 
-        # Step 2: Check if the ray is parallel to the plane
         denominator = normal.dotProduct(ray_direction)
-        if abs(denominator) < 1e-8:
+        if abs(denominator) < 1e-6:  # Loosen precision check
             return None, None  # Ray is parallel to the plane
 
-        # Step 3: Calculate the intersection point with the plane
-        d = normal.dotProduct(v1)  # Distance from the origin to the plane
+        d = normal.dotProduct(v1)
         t = (d - normal.dotProduct(ray_origin)) / denominator
 
         if t < 0:
             return None, None  # The intersection is behind the ray origin
 
-        # Step 4: Compute the intersection point
         intersection_point = ray_origin.add(ray_direction.mul(t))
         return intersection_point, t
     
@@ -239,29 +317,30 @@ class DrawTriangle:
             self.is_cube_mode = not self.is_cube_mode
 
         if keys[pygame.K_p]:
-                self.scene.is_orthographic = not self.scene.is_orthographic
-                if not self.scene.is_orthographic:
-                    self.scene.set_projection_perspective(800, 600, 0.1, 1000)
-                else:
-                    self.scene.set_projection_orthographic(800, 600, 0.1, 1000)
+            self.scene.is_orthographic = not self.scene.is_orthographic
+            if not self.scene.is_orthographic:
+                self.scene.set_projection_perspective(800, 600, 0.1, 1000)
+            else:
+                self.scene.set_projection_orthographic(800, 600, 0.1, 1000)
 
         if keys[pygame.K_w]:
-                self.is_wireframe = not self.is_wireframe
+            self.is_wireframe = not self.is_wireframe
 
-        if self.is_cube_mode :
-            if mouse_buttons[0]: 
+        # Only rotate when cube mode is enabled and mouse buttons are pressed
+        if self.is_cube_mode:
+            if mouse_buttons[0]:  # Rotate around Yaw
                 self.yaw = 0.1
                 self.globalYaw += 0.1
             else:
                 self.yaw = 0
 
-            if mouse_buttons[1]: 
+            if mouse_buttons[1]:  # Rotate around Pitch
                 self.pitch = 0.1
                 self.globalPitch += 0.1
             else:
                 self.pitch = 0
 
-            if mouse_buttons[2]: 
+            if mouse_buttons[2]:  # Rotate around Roll
                 self.roll = 0.1
                 self.globalRoll += 0.1
             else:
@@ -270,6 +349,7 @@ class DrawTriangle:
             if keys[pygame.K_c]:
                 self.goBackInInitialState(100, screen, isExponentialMap)
 
+            # Apply Euler or Exponential Map rotations conditionally
             if isEulerAngles:
                 if isIntrinsic:
                     self.mesh.euler_intrinsic(self.yaw, self.pitch, self.roll)
@@ -277,14 +357,22 @@ class DrawTriangle:
                     self.mesh.euler_extrinsic(self.yaw, self.pitch, self.roll)
 
             if isExponentialMap:
-                if (self.yaw > 0):
+                if self.yaw != 0:
                     self.mesh.exponential_map(dataStructure3D.vec3(0, 1, 0), self.yaw)
-                if (self.pitch > 0):
+                if self.pitch != 0:
                     self.mesh.exponential_map(dataStructure3D.vec3(1, 0, 0), self.pitch)
-                if (self.roll > 0):
+                if self.roll != 0:
                     self.mesh.exponential_map(dataStructure3D.vec3(0, 0, 1), self.roll)
 
-        else : 
+            if isQuaternions:
+                if self.yaw != 0 or self.pitch != 0 or self.roll != 0:
+                    # Update quaternion incrementally
+                    delta_quaternion = euler_to_quaternion(self.yaw, self.pitch, self.roll)
+                    self.current_quaternion = delta_quaternion.multiply(self.current_quaternion)
+                    self.current_quaternion.normalize()
+                    self.mesh.model_matrix = self.current_quaternion.to_rotation_matrix()
+        else:
+            # If not in cube mode, handle camera movements with mouse and keys
             if mouse_buttons[0]:
                 if self.last_mouse_pos:
                     dx = mouse_pos[0] - self.last_mouse_pos[0]
@@ -305,6 +393,9 @@ class DrawTriangle:
                 self.scene.translate_camera(0, -0.1, 0)  # Down
 
             self.last_mouse_pos = mouse_pos
+            self.throw_ray(pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1])
+
+
 
     def render(self):
         pygame.init()
@@ -345,7 +436,8 @@ class DrawTriangle:
         self.mesh.add_triangle(1, 5, 6)   # Reorder for counterclockwise (was 1, 2, 6)
         self.mesh.add_triangle(1, 6, 2)   # Reorder for counterclockwise (was 1, 6, 5)
 
-
+        font = pygame.font.Font(None, 20)
+        
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -354,16 +446,16 @@ class DrawTriangle:
 
             self.handle_mouse_events(screen)
 
-            if (self.is_cube_mode):
-                self.display(screen, pygame.font.Font(None, 20), self.globalYaw, self.globalPitch, self.globalRoll)
-
-            
             screen.fill((255, 255, 255))
             if self.is_wireframe:
                 self.drawTriangles(screen)
             else:
                 self.drawTrianglesSolid(screen)
             self.draw_axes(screen)
+            
+            self.update_display_data()
+            self.display_rotation_data(screen, font)
+            
             pygame.display.flip()
 
 if len(sys.argv) < 2:

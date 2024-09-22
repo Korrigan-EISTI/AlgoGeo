@@ -176,17 +176,17 @@ class Quaternion:
         self.z = z
         self.w = w
 
-    def __add__(self, other):
+    def add(self, other):
         return Quaternion(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w)
     
-    def __mul__(self, other):
+    def multiply(self, other):
         w = self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z
         x = self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y
         y = self.w * other.y - self.x * other.z + self.y * other.w + self.z * other.x
         z = self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w
         return Quaternion(w, x, y, z)
     
-    def __truediv__(self, scalar):
+    def div(self, scalar):
         return Quaternion(self.w / scalar, self.x / scalar, self.y / scalar, self.z / scalar)
 
 
@@ -200,7 +200,10 @@ class Quaternion:
         norm = self.norm()
         if norm == 0:
             return Quaternion(1, 0, 0, 0)  # Avoid division by zero, return identity quaternion
-        return self / norm
+        self.w /= norm
+        self.x /= norm
+        self.y /= norm
+        self.z /= norm
 
     def inverse(self):
         return self.conjugate() / (self.norm() ** 2)
@@ -210,6 +213,38 @@ class Quaternion:
         q_conj = self.conjugate()
         q_result = self * q_v * q_conj
         return vec3(q_result.x, q_result.y, q_result.z)
+    
+    def to_rotation_matrix(self):
+        xx = self.x * self.x
+        yy = self.y * self.y
+        zz = self.z * self.z
+        xy = self.x * self.y
+        xz = self.x * self.z
+        yz = self.y * self.z
+        wx = self.w * self.x
+        wy = self.w * self.y
+        wz = self.w * self.z
+
+        return mat4(
+            1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy), 0,
+            2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx), 0,
+            2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy), 0,
+            0, 0, 0, 1
+        )
+        
+    @staticmethod
+    def from_axis_angle(axis, angle):
+        half_angle = angle / 2
+        sin_half_angle = math.sin(half_angle)
+        return Quaternion(
+            math.cos(half_angle),
+            axis.x * sin_half_angle,
+            axis.y * sin_half_angle,
+            axis.z * sin_half_angle
+        )
+        
+    def toString(self):
+        return f"Quaternion: (w: {self.w:.2f}, x: {self.x:.2f}, y: {self.y:.2f}, z: {self.z:.2f})"
 
 class TriangleMesh:
     def __init__(self):

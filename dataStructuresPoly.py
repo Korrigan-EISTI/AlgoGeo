@@ -1,4 +1,3 @@
-
 class Point:
     def __init__(self, x, y):
         self.x = x
@@ -10,6 +9,7 @@ class Point:
     def getY(self):
         return self.y
 
+    # Comparison operators for sorting and equality checks
     def __lt__(self, other):
         return (self.x, self.y) < (other.x, other.y)
 
@@ -23,40 +23,22 @@ class Segment:
     def __init__(self, xA, xB, yA, yB):
         self.p1 = Point(xA, yA)
         self.p2 = Point(xB, yB)
-         
-    def intersects(self, other):
-        A1, A2 = self.p1, self.p2
-        B1, B2 = other.p1, other.p2
-        
-        v1 = (A2.x - A1.x, A2.y - A1.y)
-        v2 = (B2.x - B1.x, B2.y - B1.y)
-
-        r = (B1.x - A1.x, B1.y - A1.y)
-
-        det = v1[0] * v2[1] - v1[1] * v2[0]
-        if det == 0:
-            return False 
-        
-        t = (r[0] * v2[1] - r[1] * v2[0]) / det
-        u = (r[0] * v1[1] - r[1] * v1[0]) / det
-
-        return (0 <= t <= 1) and (0 <= u <= 1)
     
     def __repr__(self):
-        return f"Segment(({self.p1.getX()}, {self.p1.getY()}) -> ({self.p2.getX()}, {self.p2.getY()})"
+        return f"Segment(({self.p1.getX()}, {self.p1.getY()}) -> ({self.p2.getX()}, {self.p2.getY()}))"
 
 class Polygon:
     def __init__(self, x, y):
-        self.points = [Point(x, y)]
-        self.segments = set()
+        self.points = [Point(x, y)]  # Initialize with the first point
+        self.segments = set()  # Set to store unique segments
 
+    # Adds a new point and segment to the polygon, returns True if successful
     def addPoint(self, p):
-        #if self.notCrossingSegment(p.getX(), p.getY()):
-            self.segments.add(Segment(self.points[-1].getX(), p.getX(), self.points[-1].getY(), p.getY()))
-            self.points.append(p)
-            return True
-        #return False
+        self.segments.add(Segment(self.points[-1].getX(), p.getX(), self.points[-1].getY(), p.getY()))
+        self.points.append(p)
+        return True
     
+    # Ensures that the new segment doesn't cross any existing segments
     def notCrossingSegment(self, x, y):
         addingSeg = Segment(self.points[-1].getX(), x, self.points[-1].getY(), y)
         for segment in self.segments:
@@ -64,16 +46,18 @@ class Polygon:
                 return False
         return True
     
+    # Closes the polygon by connecting the last point to the first
     def closePolygon(self):
         if len(self.points) > 2:
             self.segments.add(Segment(self.points[-1].getX(), self.points[0].getX(), self.points[-1].getY(), self.points[0].getY()))
 
+    # Checks if the polygon is convex using cross product method
     def isConvex(self):
-        if len(self.segments) < 4 : 
-            return True
+        if len(self.segments) < 4:
+            return True  # A polygon with fewer than 4 segments is convex by definition
         
         sign = None
-        n = len(self.points) - 2
+        n = len(self.points) - 2  # Iterate over triplets of points
         for i in range(n):
             p1 = self.points[i]
             p2 = self.points[i + 1]
@@ -84,13 +68,11 @@ class Polygon:
             v2x = p3.getX() - p2.getX()
             v2y = p3.getY() - p2.getY()
              
-            current_sign =  v1x * v2y - v1y * v2x
+            current_sign = v1x * v2y - v1y * v2x  # Cross product to check orientation
             if current_sign != 0:
                 if sign is None:
-                    sign = current_sign
-                elif sign * current_sign < 0:
+                    sign = current_sign  # Set the initial sign
+                elif sign * current_sign < 0:  # If orientation changes, it's concave
                     return False
                 
-        return True
-    
-    
+        return True  # If all turns have the same orientation, it's convex

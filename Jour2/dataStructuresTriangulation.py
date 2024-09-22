@@ -11,41 +11,41 @@ import pygame
 
 class Triangle:
     def __init__(self, p1, p2, p3):
-        self.points = [p1, p2, p3]
-        self.neighbours = [-1, -1, -1]  # Indices des triangles voisins
+        self.points = [p1, p2, p3]  # Stores the three points of the triangle
+        self.neighbours = [-1, -1, -1]  # Indices of neighboring triangles
     
+    # Fills in the neighbor indices for the triangle
     def fillIndexNeighbours(self, triangleEdgeP1P2, triangleEdgeP2P3, triangleEdgeP3P1):
         self.neighbours.clear()
         self.neighbours.extend([triangleEdgeP1P2, triangleEdgeP2P3, triangleEdgeP3P1])
 
+    # Determines the orientation of the three points (collinear, clockwise, or counterclockwise)
     def orientation(self, p, q, r):
         val = (q.getY() - p.getY()) * (r.getX() - q.getX()) - (q.getX() - p.getX()) * (r.getY() - q.getY())
         if val == 0:
-            return 0 
+            return 0  # Collinear
         elif val > 0:
-            return 1 
+            return 1  # Clockwise
         else:
-            return 2 
+            return 2  # Counterclockwise
 
+    # Checks if a point is inside the triangle using orientation
     def pointInsideTriangle(self, point):
         p1, p2, p3 = self.points
         
-        # Calculer les orientations des triplets de points
         o1 = self.orientation(p1, p2, point)
         o2 = self.orientation(p2, p3, point)
         o3 = self.orientation(p3, p1, point)
         
-        # Tous les points doivent avoir la même orientation pour être à l'intérieur
-        if o1 == o2 == o3:
-            return True
-        return False
+        # The point is inside if all orientations are the same
+        return o1 == o2 == o3
 
+    # Checks if the triangle is degenerate (i.e., points are collinear)
     def isDegenerate(self):
         p1, p2, p3 = self.points
-        # Check if the points are collinear using the orientation method
-        return self.orientation(p1, p2, p3) == 0
+        return self.orientation(p1, p2, p3) == 0  # Collinear points indicate a degenerate triangle
     
-    
+    # Calculates the circumcenter of the triangle (center of the circumcircle)
     def circumcenter(self):
         p1, p2, p3 = self.points
 
@@ -53,12 +53,15 @@ class Triangle:
         Bx, By = p2.getX(), p2.getY()
         Cx, Cy = p3.getX(), p3.getY()
 
+        # Vectors from point A to points B and C
         vectorAB = (Bx - Ax, By - Ay)
         vectorAC = (Cx - Ax, Cy - Ay)
         
+        # Perpendicular bisectors (mediatrices) of AB and AC
         mediatriceAB = (-vectorAB[1], vectorAB[0])
         mediatriceAC = (-vectorAC[1], vectorAC[0])
         
+        # Midpoints of AB and AC
         D = dataStructuresPoly.Point((Ax + Bx) / 2, (Ay + By) / 2)
         E = dataStructuresPoly.Point((Ax + Cx) / 2, (Ay + Cy) / 2)
 
@@ -68,6 +71,7 @@ class Triangle:
         Ex, Ey = E.getX(), E.getY()
         medACx, medACy = mediatriceAC
 
+        # Solving system of linear equations to find intersection of mediatrices
         A = [
             [medABx, -medACx],
             [medABy, -medACy]
@@ -77,9 +81,9 @@ class Triangle:
             Ey - Dy
         ]
         
-        det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
+        det = A[0][0] * A[1][1] - A[0][1] * A[1][0]  # Determinant of matrix A
 
-        if det == 0:
+        if det == 0:  # Lines are parallel, no unique solution
             return None, None
         
         inv_det = 1 / det
@@ -88,6 +92,7 @@ class Triangle:
             [-A[1][0] * inv_det, A[0][0] * inv_det]
         ]
 
+        # Solving for intersection coordinates
         t1 = invA[0][0] * b[0] + invA[0][1] * b[1]
         t2 = invA[1][0] * b[0] + invA[1][1] * b[1]
        
@@ -96,13 +101,16 @@ class Triangle:
 
         center = dataStructuresPoly.Point(center_x, center_y)
 
+        # Radius of the circumcircle is the distance from center to any vertex
         radius = self.distance(p1, center)
 
         return center, radius
-        
+
+    # Calculates the Euclidean distance between two points
     def distance(self, point1, point2):
         return math.sqrt((point1.getX() - point2.getX())**2  + (point1.getY() - point2.getY())**2)
     
+    # Checks if a point is inside the circumcircle of the triangle
     def isPointInsideCircumcircle(self, point):
         center, radius = self.circumcenter()
         if center is None:
@@ -110,11 +118,9 @@ class Triangle:
 
         distance = self.distance(center, point)
     
-        # Inclure une marge de tolérance pour les calculs flottants
+        # Floating-point tolerance to handle precision issues
         epsilon = 1e-6
         return distance <= radius + epsilon
-
-
 class Triangulation:
     def __init__(self, screen):
         self.triangles = []

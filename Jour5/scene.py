@@ -1,5 +1,6 @@
 import dataStructure3D
 import math
+from light import Light
 
 class Scene:
     def __init__(self):
@@ -19,6 +20,7 @@ class Scene:
         self.is_orthographic = True
         self.camera_position = dataStructure3D.vec4(0, 0, -10, 1)
         self.camera_rotation = dataStructure3D.vec4(0, 0, 0, 1)  # Yaw, Pitch, Roll
+        self.light = Light(dataStructure3D.vec4(0, 0, -25, 0.7), 1)
 
     def set_view_matrix(self, matrix):
         self.view_matrix = matrix

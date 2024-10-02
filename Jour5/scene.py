@@ -97,6 +97,44 @@ class Scene:
             0, 0, 0, 1
         )
         self.set_viewport_matrix(viewport_matrix)
+        
+    def screen_to_world_direction(self, screen_x, screen_y):
+        # 1. Conversion des coordonnées de la souris en coordonnées normalisées de l'écran (NDC)
+        normalized_x = (2.0 * screen_x) / 800 - 1.0  # Largeur de l'écran de 800
+        normalized_y = 1.0 - (2.0 * screen_y) / 600  # Hauteur de l'écran de 600
+
+        # Cas de la projection orthographique
+        if self.is_orthographic:
+            # La position du rayon est obtenue par projection dans l'espace monde (sur le plan de projection)
+            ray_origin = dataStructure3D.vec4(normalized_x, normalized_y, 0, 1)
+            
+            # La direction du rayon est constante, généralement vers l'avant (négatif sur l'axe Z)
+            ray_direction = dataStructure3D.vec3(0, 0, -1).normalize()
+            
+            # Inverser la matrice de vue pour obtenir la position de départ dans l'espace monde
+            ray_origin_world = self.view_matrix.inverse().vectorMultiplication(ray_origin)
+            return ray_origin_world, ray_direction  # Retourner l'origine et la direction du rayon
+
+        # Cas de la projection perspective
+        else:
+            # 2. Création du rayon en coordonnées de clip space (NDC avec z = -1 pour les rayons vers l'avant)
+            ray_clip = dataStructure3D.vec4(normalized_x, normalized_y, -1.0, 1.0)
+
+            # 3. Transformation inverse de la matrice de projection pour obtenir les coordonnées dans l'espace de vue
+            ray_eye = self.projection_matrix.inverse().vectorMultiplication(ray_clip)
+            ray_eye = dataStructure3D.vec4(ray_eye.x, ray_eye.y, -1.0, 0.0)  # Mettre z = -1 et w = 0 pour un rayon
+
+            # 4. Transformation inverse de la matrice de vue pour obtenir la direction dans l'espace monde
+            ray_world = self.view_matrix.inverse().vectorMultiplication(ray_eye)
+
+            # 5. Créer un vecteur direction dans l'espace monde et le normaliser
+            ray_world_dir = dataStructure3D.vec3(ray_world.x, ray_world.y, ray_world.z).normalize()
+
+            # La position du rayon en perspective part de la caméra
+            ray_origin = dataStructure3D.vec4(self.cameraMatrix.mat[0][3], self.cameraMatrix.mat[1][3], self.cameraMatrix.mat[2][3], self.cameraMatrix.mat[3][3])
+
+            return ray_origin, ray_world_dir  # Retourner l'origine et la direction du rayon
+
 
     def rotate_camera(self, yaw, pitch):
         # Apply yaw (rotation around Y-axis) and pitch (rotation around X-axis) to the camera

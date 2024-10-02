@@ -12,7 +12,7 @@ class vec3:
     def normalize(self):
         norm = self.length()
         if norm == 0:
-            return
+            return vec3(0, 0, 0)
         return vec3(self.x / norm, self.y / norm, self.z / norm)
     
     def neg(self):
@@ -179,19 +179,24 @@ class Quaternion:
     def add(self, other):
         return Quaternion(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w)
     
+    def sub(self, other):
+        return Quaternion(self.x - other.x, self.y - other.y, self.z - other.z, self.w - other.w)
+    
     def multiply(self, other):
         w = self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z
         x = self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y
         y = self.w * other.y - self.x * other.z + self.y * other.w + self.z * other.x
         z = self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w
-        return Quaternion(w, x, y, z)
-    
-    def div(self, scalar):
-        return Quaternion(self.w / scalar, self.x / scalar, self.y / scalar, self.z / scalar)
+        return Quaternion(x, y, z, w)  # Corrected argument order to (x, y, z, w)
 
+    def div(self, scalar):
+        return Quaternion(self.x / scalar, self.y / scalar, self.z / scalar, self.w / scalar)
+    
+    def mul(self, scalar):
+        return Quaternion(self.x * scalar, self.y * scalar, self.z * scalar, self.w * scalar)
 
     def conjugate(self):
-        return Quaternion(self.w, -self.x, -self.y, -self.z)
+        return Quaternion(-self.x, -self.y, -self.z, self.w)
 
     def norm(self):
         return math.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
@@ -199,21 +204,22 @@ class Quaternion:
     def normalize(self):
         norm = self.norm()
         if norm == 0:
-            return Quaternion(1, 0, 0, 0)  # Avoid division by zero, return identity quaternion
+            return Quaternion(0, 0, 0, 1)  # Avoid division by zero, return identity quaternion
         self.w /= norm
         self.x /= norm
         self.y /= norm
         self.z /= norm
+        return self
 
     def inverse(self):
-        return self.conjugate() / (self.norm() ** 2)
+        return self.conjugate().div(self.norm() ** 2)
 
     def rotate_vector(self, v):
-        q_v = Quaternion(0, v.x, v.y, v.z)
+        q_v = Quaternion(v.x, v.y, v.z, 0)  # Create quaternion with w=0 to represent the vector
         q_conj = self.conjugate()
-        q_result = self * q_v * q_conj
-        return vec3(q_result.x, q_result.y, q_result.z)
-    
+        q_result = self.multiply(q_v).multiply(q_conj)
+        return  vec3(q_result.x, q_result.y, q_result.z)
+
     def to_rotation_matrix(self):
         xx = self.x * self.x
         yy = self.y * self.y
@@ -231,18 +237,21 @@ class Quaternion:
             2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy), 0,
             0, 0, 0, 1
         )
-        
+
+    def dot(self, other):
+        return self.w * other.w + self.x * other.x + self.y * other.y + self.z * other.z
+
     @staticmethod
     def from_axis_angle(axis, angle):
         half_angle = angle / 2
         sin_half_angle = math.sin(half_angle)
         return Quaternion(
-            math.cos(half_angle),
             axis.x * sin_half_angle,
             axis.y * sin_half_angle,
-            axis.z * sin_half_angle
+            axis.z * sin_half_angle,
+            math.cos(half_angle)
         )
-        
+
     def toString(self):
         return f"Quaternion: (w: {self.w:.2f}, x: {self.x:.2f}, y: {self.y:.2f}, z: {self.z:.2f})"
 

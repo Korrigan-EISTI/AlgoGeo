@@ -50,10 +50,11 @@ class DrawTriangle:
     def __init__(self):
         self.scene = scene.Scene()
         self.mesh = dataStructure3D.TriangleMesh()
-        self.mesh_axes = dataStructure3D.TriangleMesh()  # Axes mesh
+        self.mesh_axes = dataStructure3D.TriangleMesh()
         self.last_mouse_pos = None
         self.is_wireframe = False
         self.is_cube_mode = False
+        self.is_backface_culling = True
 
         
         self.yaw = 0
@@ -77,7 +78,8 @@ class DrawTriangle:
         self.exp_map_text_roll = ""
         self.quaternion_text = ""
         
-        self.intersected_triangle = None  # Store the intersected triangle
+        self.intersected_triangle = None
+        self.intersection_point = None
 
     def update_display_data(self):
         axis = dataStructure3D.vec3(self.globalPitch, self.globalPitch, self.globalRoll)
@@ -149,7 +151,7 @@ class DrawTriangle:
             cam_pos = dataStructure3D.vec4(self.scene.cameraMatrix.mat[0][3], self.scene.cameraMatrix.mat[1][3], self.scene.cameraMatrix.mat[2][3], self.scene.cameraMatrix.mat[3][3])
             view_vector = vertex1.sub(cam_pos).normalize()
 
-            if normal.dotProduct(view_vector) < 0:
+            if self.is_backface_culling and normal.dotProduct(view_vector) < 0:
                 continue
 
             if self.intersected_triangle == (idx1, idx2, idx3):
@@ -225,28 +227,13 @@ class DrawTriangle:
         self.globalYaw, self.globalPitch, self.globalRoll = 0, 0, 0
         self.yaw, self.pitch, self.roll = 0, 0, 0
 
-    def throw_ray(self, mouse_x, mouse_y):
-        # Convertir les coordonnées de la souris en coordonnées de l'espace de la caméra
-        ray_origin, ray_direction = self.scene.screen_to_world_direction(mouse_x, mouse_y)
+    def display_intersection_point(self, screen, font):
+        if self.intersection_point is not None:
+            x, y, z = self.intersection_point.x, self.intersection_point.y, self.intersection_point.z
+            intersection_text = f"Intersection: ({x:.2f}, {y:.2f}, {z:.2f})"
+            text_surface = font.render(intersection_text, True, (0, 0, 0))
+            screen.blit(text_surface, (20, 160))
 
-        closest_t = float('inf')
-        closest_triangle = None
-
-        # Tester l'intersection avec chaque triangle du mesh
-        for idx1, idx2, idx3 in self.mesh.index:
-            vertex1 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx1])
-            vertex2 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx2])
-            vertex3 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx3])
-            
-            hit, t = self.ray_intersects_triangle(ray_origin, ray_direction, vertex1, vertex2, vertex3)
-
-            if hit and t < closest_t:
-                closest_t = t
-                closest_triangle = (idx1, idx2, idx3)
-
-        self.intersected_triangle = closest_triangle
-    
-    # Test d'intersection entre un rayon et un triangle (algorithme de Möller-Trumbore)
     def ray_intersects_triangle(self, ray_origin, ray_direction, v0, v1, v2):
         epsilon = 1e-6
         edge1 = v1.sub(v0)
@@ -255,7 +242,7 @@ class DrawTriangle:
         a = edge1.dotProduct(h)
 
         if -epsilon < a < epsilon:
-            return False, None  # Le rayon est parallèle au triangle
+            return False, None  # The ray is parallel to the triangle
 
         f = 1.0 / a
         s = ray_origin.sub(v0)
@@ -272,10 +259,49 @@ class DrawTriangle:
 
         t = f * edge2.dotProduct(q)
 
-        if t > epsilon:  # t est la distance au long du rayon
-            return True, t
+        if t > epsilon:  # t is the distance along the ray
+            intersection_point = ray_origin.add(ray_direction.mul(t))
+            return True, intersection_point
         else:
             return False, None
+
+    def throw_ray(self, mouse_x, mouse_y):
+        # Convert the mouse coordinates into world space
+        ray_origin, ray_direction = self.scene.screen_to_world_direction(mouse_x, mouse_y)
+
+        closest_t = float('inf')
+        closest_triangle = None
+        closest_intersection_point = None
+
+        # Test intersection with each triangle in the mesh
+        for idx1, idx2, idx3 in self.mesh.index:
+            vertex1 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx1])
+            vertex2 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx2])
+            vertex3 = (self.scene.view_matrix.matrixMultiplication(self.mesh.model_matrix)).vectorMultiplication(self.mesh.vertex[idx3])
+            
+            hit, intersection_point = self.ray_intersects_triangle(ray_origin, ray_direction, vertex1, vertex2, vertex3)
+
+            if hit:
+                # Calculate the distance along the ray
+                distance = ray_origin.sub(intersection_point).length()
+                if distance < closest_t:
+                    closest_t = distance
+                    closest_triangle = (idx1, idx2, idx3)
+                    closest_intersection_point = intersection_point
+
+        self.intersected_triangle = closest_triangle
+        self.intersection_point = closest_intersection_point
+    
+    def handle_mouse_events(self, screen):
+        mouse_buttons = pygame.mouse.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+        keys = pygame.key.get_pressed()
+
+        if keys[pygame.K_b]:  # Toggle back-face culling with the 'B' key
+            self.is_backface_culling = not self.is_backface_culling
+
+        # Handle ray intersection to highlight the triangle and show 3D point
+        self.throw_ray(mouse_pos[0], mouse_pos[1])
 
     
     def handle_mouse_events(self, screen):
@@ -285,6 +311,9 @@ class DrawTriangle:
 
         if keys[pygame.K_m]:
             self.is_cube_mode = not self.is_cube_mode
+            
+        if keys[pygame.K_b]:
+            self.is_backface_culling = not self.is_backface_culling
 
         if keys[pygame.K_p]:
             self.scene.is_orthographic = not self.scene.is_orthographic
@@ -433,6 +462,7 @@ class DrawTriangle:
             
             self.update_display_data()
             self.display_rotation_data(screen, font)
+            self.display_intersection_point(screen, font)
             
             pygame.display.flip()
 
